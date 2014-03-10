@@ -47,6 +47,8 @@ import java.util.Set;
  */
 public class RecipientsPanel extends RelativeLayout {
 
+  private static final String TAG = RecipientsPanel.class.getSimpleName();
+
   private RecipientsPanelChangedListener panelChangeListener;
   private RecipientsEditor recipientsText;
   private View panel;
@@ -87,7 +89,7 @@ public class RecipientsPanel extends RelativeLayout {
     try {
       panelRecipients = new HashSet<Recipient>(getRecipients().getRecipientsList());
     } catch (RecipientFormattingException e) {
-      Log.w("RecipientsPanel", e);
+      Log.d(TAG, "Empty list of recipients retrieved. Initialize empty HashSet.");
       panelRecipients = new HashSet<Recipient>();
     }
 

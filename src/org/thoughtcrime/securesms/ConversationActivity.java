@@ -268,6 +268,10 @@ public class ConversationActivity extends PassphraseRequiredSherlockFragmentActi
 
     boolean pushRegistered = TextSecurePreferences.isPushRegistered(this);
 
+    if(isSingleConversation() && pushRegistered) {
+      inflater.inflate(R.menu.conversation_contact_option_sms_push, menu);
+    }
+
     if (isSingleConversation() && isEncryptedConversation) {
       if (isAuthenticatedConversation) {
         inflater.inflate(R.menu.conversation_secure_identity, menu);

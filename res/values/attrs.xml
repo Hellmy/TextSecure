@@ -65,6 +65,7 @@
     <attr name="menu_split_icon" format="reference" />
     <attr name="menu_accept_icon" format="reference" />
     <attr name="menu_refresh_directory" format="reference" />
+    <attr name="menu_contact_option_sms_push" format="reference" />
 
     <declare-styleable name="ForegroundImageView">
         <attr name="android:foreground" />
