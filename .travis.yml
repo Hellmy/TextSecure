@@ -1,5 +1,9 @@
 language: android
 script: "./gradlew build"
+deploy:
+  provider: releases
+  api-key: "GITHUB OAUTH TOKEN"
+  skip_cleanup: true
 android:
   components:
     - platform-tools
