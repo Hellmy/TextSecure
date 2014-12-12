@@ -22,12 +22,14 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.TypedArray;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
 import android.provider.Contacts.Intents;
+import android.provider.ContactsContract;
 import android.provider.ContactsContract.QuickContact;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -40,6 +42,7 @@ import android.widget.Toast;
 
 import org.thoughtcrime.securesms.crypto.MasterSecret;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
+import org.thoughtcrime.securesms.contacts.ContactPhotoFactory;
 import org.thoughtcrime.securesms.database.MmsDatabase;
 import org.thoughtcrime.securesms.database.SmsDatabase;
 import org.thoughtcrime.securesms.database.model.MediaMmsMessageRecord;
@@ -409,7 +412,15 @@ public class ConversationItem extends LinearLayout {
   private void setContactPhotoForRecipient(final Recipient recipient) {
     if (contactPhoto == null) return;
 
-    contactPhoto.setImageBitmap(recipient.getCircleCroppedContactPhoto());
+    Bitmap contactPhotoBitmap;
+
+    if ((recipient.getContactPhoto() == ContactPhotoFactory.getDefaultContactPhoto(context)) && (groupThread)) {
+      contactPhotoBitmap = recipient.getGeneratedAvatar(context);
+    } else {
+      contactPhotoBitmap = recipient.getCircleCroppedContactPhoto();
+    }
+
+    contactPhoto.setImageBitmap(contactPhotoBitmap);
 
     contactPhoto.setOnClickListener(new View.OnClickListener() {
       @Override
@@ -417,7 +428,9 @@ public class ConversationItem extends LinearLayout {
         if (recipient.getContactUri() != null) {
           QuickContact.showQuickContact(context, contactPhoto, recipient.getContactUri(), QuickContact.MODE_LARGE, null);
         } else {
-          Intent intent = new Intent(Intents.SHOW_OR_CREATE_CONTACT, Uri.fromParts("tel", recipient.getNumber(), null));
+          final Intent intent = new Intent(Intent.ACTION_INSERT_OR_EDIT);
+          intent.putExtra(ContactsContract.Intents.Insert.PHONE, recipient.getNumber());
+          intent.setType(ContactsContract.Contacts.CONTENT_ITEM_TYPE);
           context.startActivity(intent);
         }
       }

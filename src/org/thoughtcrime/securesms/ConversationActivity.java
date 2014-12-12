@@ -23,7 +23,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
@@ -34,18 +33,15 @@ import android.provider.ContactsContract;
 import android.telephony.PhoneNumberUtils;
 import android.text.Editable;
 import android.text.InputType;
-import android.text.Spannable;
-import android.text.SpannableString;
 import android.text.TextUtils;
 import android.text.TextWatcher;
-import android.text.style.RelativeSizeSpan;
 import android.util.Log;
-import android.view.ContextMenu;
 import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnFocusChangeListener;
@@ -53,7 +49,6 @@ import android.view.View.OnKeyListener;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
-import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -61,6 +56,7 @@ import com.google.protobuf.ByteString;
 
 import org.thoughtcrime.securesms.components.EmojiDrawer;
 import org.thoughtcrime.securesms.components.EmojiToggle;
+import org.thoughtcrime.securesms.components.SendButton;
 import org.thoughtcrime.securesms.contacts.ContactAccessor;
 import org.thoughtcrime.securesms.contacts.ContactAccessor.ContactData;
 import org.thoughtcrime.securesms.crypto.KeyExchangeInitiator;
@@ -71,7 +67,9 @@ import org.thoughtcrime.securesms.crypto.storage.TextSecureSessionStore;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.DraftDatabase;
 import org.thoughtcrime.securesms.database.DraftDatabase.Draft;
+import org.thoughtcrime.securesms.database.DraftDatabase.Drafts;
 import org.thoughtcrime.securesms.database.GroupDatabase;
+import org.thoughtcrime.securesms.database.MmsSmsColumns.Types;
 import org.thoughtcrime.securesms.database.ThreadDatabase;
 import org.thoughtcrime.securesms.mms.AttachmentManager;
 import org.thoughtcrime.securesms.mms.AttachmentTypeSelectorAdapter;
@@ -146,14 +144,10 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private static final int PICK_CONTACT_INFO = 4;
   private static final int GROUP_EDIT        = 5;
 
-  private static final int SEND_ATTRIBUTES[] = new int[]{R.attr.conversation_send_button_push,
-                                                         R.attr.conversation_send_button_sms_secure,
-                                                         R.attr.conversation_send_button_sms_insecure};
-
-  private MasterSecret    masterSecret;
-  private EditText        composeText;
-  private ImageButton     sendButton;
-  private TextView        charactersLeft;
+  private MasterSecret masterSecret;
+  private EditText     composeText;
+  private SendButton   sendButton;
+  private TextView     charactersLeft;
 
   private AttachmentTypeSelectorAdapter attachmentAdapter;
   private AttachmentManager             attachmentManager;
@@ -244,7 +238,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       addAttachmentAudio(data.getData());
       break;
     case PICK_CONTACT_INFO:
-      addContactInfo(data.getData());
+      addAttachmentContactInfo(data.getData());
       break;
     case GROUP_EDIT:
       this.recipients = data.getParcelableExtra(GroupCreateActivity.GROUP_RECIPIENT_EXTRA);
@@ -285,6 +279,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     }
 
     inflater.inflate(R.menu.conversation, menu);
+
+    if (isSingleConversation() && getRecipients().getPrimaryRecipient().getContactUri() == null) {
+      inflater.inflate(R.menu.conversation_add_to_contacts, menu);
+    }
+
     super.onPrepareOptionsMenu(menu);
     return true;
   }
@@ -295,8 +294,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     switch (item.getItemId()) {
     case R.id.menu_call:                      handleDial(getRecipients().getPrimaryRecipient()); return true;
     case R.id.menu_delete_thread:             handleDeleteThread();                              return true;
-    case R.id.menu_add_contact_info:          handleAddContactInfo();                            return true;
     case R.id.menu_add_attachment:            handleAddAttachment();                             return true;
+    case R.id.menu_add_to_contacts:           handleAddToContacts();                             return true;
     case R.id.menu_start_secure_session:      handleStartSecureSession();                        return true;
     case R.id.menu_abort_session:             handleAbortSecureSession();                        return true;
     case R.id.menu_verify_identity:           handleVerifyIdentity();                            return true;
@@ -306,49 +305,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     case R.id.menu_edit_group:                handleEditPushGroup();                             return true;
     case R.id.menu_leave:                     handleLeavePushGroup();                            return true;
     case android.R.id.home:                   handleReturnToConversationList();                  return true;
-    }
-
-    return false;
-  }
-
-  @Override
-  public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
-    if (isEncryptedConversation && isSingleConversation()) {
-      SessionStore sessionStore      = new TextSecureSessionStore(this, masterSecret);
-      Recipient  primaryRecipient    = getRecipients() == null ? null : getRecipients().getPrimaryRecipient();
-      boolean    isPushDestination   = DirectoryHelper.isPushDestination(this, getRecipients());
-      boolean    isSecureDestination = isSingleConversation() && sessionStore.containsSession(primaryRecipient.getRecipientId(),
-                                                                                              PushAddress.DEFAULT_DEVICE_ID);
-
-      getMenuInflater().inflate(R.menu.conversation_button_context, menu);
-
-      if (attachmentManager.isAttachmentPresent()) {
-        menu.removeItem(R.id.menu_context_send_encrypted_sms);
-        menu.removeItem(R.id.menu_context_send_unencrypted_sms);
-      } else {
-        menu.removeItem(R.id.menu_context_send_encrypted_mms);
-        menu.removeItem(R.id.menu_context_send_unencrypted_mms);
-      }
-
-      if (!isPushDestination) {
-        menu.removeItem(R.id.menu_context_send_push);
-      }
-
-      if (!isSecureDestination) {
-        menu.removeItem(R.id.menu_context_send_encrypted_mms);
-        menu.removeItem(R.id.menu_context_send_encrypted_sms);
-      }
-    }
-  }
-
-  @Override
-  public boolean onContextItemSelected(android.view.MenuItem item) {
-    switch (item.getItemId()) {
-      case R.id.menu_context_send_push:            sendMessage(false, false); return true;
-      case R.id.menu_context_send_encrypted_mms:
-      case R.id.menu_context_send_encrypted_sms:   sendMessage(false, true);  return true;
-      case R.id.menu_context_send_unencrypted_mms:
-      case R.id.menu_context_send_unencrypted_sms: sendMessage(true, true);   return true;
     }
 
     return false;
@@ -560,9 +516,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     builder.show();
   }
 
-  private void handleAddContactInfo() {
-    Intent intent = new Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI);
-    startActivityForResult(intent, PICK_CONTACT_INFO);
+  private void handleAddToContacts() {
+    final Intent intent = new Intent(Intent.ACTION_INSERT_OR_EDIT);
+    intent.putExtra(ContactsContract.Intents.Insert.PHONE, recipients.getPrimaryRecipient().getNumber());
+    intent.setType(ContactsContract.Contacts.CONTENT_ITEM_TYPE);
+    startActivity(intent);
   }
 
   private void handleAddAttachment() {
@@ -692,7 +650,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   }
 
   private void initializeSecurity() {
-    TypedArray drawables           = obtainStyledAttributes(SEND_ATTRIBUTES);
     SessionStore sessionStore      = new TextSecureSessionStore(this, masterSecret);
     Recipient  primaryRecipient    = getRecipients() == null ? null : getRecipients().getPrimaryRecipient();
     boolean    isPushDestination   = DirectoryHelper.isPushDestination(this, getRecipients());
@@ -707,26 +664,20 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       this.characterCalculator     = new CharacterCalculator();
     }
 
-    if (isPushDestination) {
-      sendButton.setImageDrawable(drawables.getDrawable(0));
-      setComposeHint(getString(R.string.conversation_activity__type_message_push));
-    } else if (isSecureDestination) {
-      sendButton.setImageDrawable(drawables.getDrawable(1));
-      setComposeHint(attachmentManager.isAttachmentPresent() ?
-                     getString(R.string.conversation_activity__type_message_mms_secure) :
-                     getString(R.string.conversation_activity__type_message_sms_secure));
-    } else {
-      sendButton.setImageDrawable(drawables.getDrawable(2));
-      setComposeHint((attachmentManager.isAttachmentPresent() || !recipients.isSingleRecipient()) ?
-                     getString(R.string.conversation_activity__type_message_mms_insecure) :
-                     getString(R.string.conversation_activity__type_message_sms_insecure));
-    }
+    sendButton.initializeAvailableTransports(!recipients.isSingleRecipient() || attachmentManager.isAttachmentPresent());
+    if (!isPushDestination  ) sendButton.disableTransport("textsecure");
+    if (!isSecureDestination) sendButton.disableTransport("secure_sms");
 
-    drawables.recycle();
+    if (isPushDestination) {
+      sendButton.setDefaultTransport("textsecure");
+    } else if (isSecureDestination) {
+      sendButton.setDefaultTransport("secure_sms");
+    } else {
+      sendButton.setDefaultTransport("insecure_sms");
+    }
 
     calculateCharactersRemaining();
   }
-
 
   private void initializeMmsEnabledCheck() {
     new AsyncTask<Void, Void, Boolean>() {
@@ -755,7 +706,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     threadId            = getIntent().getLongExtra(THREAD_ID_EXTRA, -1);
     distributionType    = getIntent().getIntExtra(DISTRIBUTION_TYPE_EXTRA,
                                                   ThreadDatabase.DistributionTypes.DEFAULT);
-    sendButton          = (ImageButton)findViewById(R.id.send_button);
+    sendButton          = (SendButton)findViewById(R.id.send_button);
     composeText         = (EditText)findViewById(R.id.embedded_text_editor);
     masterSecret        = getIntent().getParcelableExtra(MASTER_SECRET_EXTRA);
     charactersLeft      = (TextView)findViewById(R.id.space_left);
@@ -774,6 +725,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     sendButton.setOnClickListener(sendButtonListener);
     sendButton.setEnabled(true);
+    sendButton.setComposeTextView(composeText);
     composeText.setOnKeyListener(composeKeyPressedListener);
     composeText.addTextChangedListener(composeKeyPressedListener);
     composeText.setOnEditorActionListener(sendButtonListener);
@@ -788,8 +740,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
         initializeTitleBar();
       }
     });
-
-    registerForContextMenu(sendButton);
   }
 
   private void initializeReceivers() {
@@ -839,6 +789,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       AttachmentManager.selectVideo(this, PICK_VIDEO); break;
     case AttachmentTypeSelectorAdapter.ADD_SOUND:
       AttachmentManager.selectAudio(this, PICK_AUDIO); break;
+    case AttachmentTypeSelectorAdapter.ADD_CONTACT_INFO:
+      AttachmentManager.selectContactInfo(this, PICK_CONTACT_INFO); break;
     }
   }
 
@@ -885,7 +837,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     }
   }
 
-  private void addContactInfo(Uri contactUri) {
+  private void addAttachmentContactInfo(Uri contactUri) {
     ContactAccessor contactDataList = ContactAccessor.getInstance();
     ContactData contactData = contactDataList.getContactData(this, contactUri);
 
@@ -914,8 +866,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     builder.show();
   }
 
-  private List<Draft> getDraftsForCurrentState() {
-    List<Draft> drafts = new LinkedList<>();
+  private Drafts getDraftsForCurrentState() {
+    Drafts drafts = new Drafts();
 
     if (!Util.isEmpty(composeText)) {
       drafts.add(new Draft(Draft.TEXT, composeText.getText().toString()));
@@ -934,27 +886,22 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     if (this.threadId <= 0 || this.recipients == null || this.recipients.isEmpty())
       return;
 
-    final List<Draft> drafts = getDraftsForCurrentState();
-
-    if (drafts.size() <= 0)
-      return;
+    final Drafts drafts = getDraftsForCurrentState();
 
     final long thisThreadId             = this.threadId;
     final MasterSecret thisMasterSecret = this.masterSecret.parcelClone();
 
     new AsyncTask<Void, Void, Void>() {
       @Override
-      protected void onPostExecute(Void aVoid) {
-        super.onPostExecute(aVoid);
-        Toast.makeText(ConversationActivity.this,
-                       R.string.ConversationActivity_saved_draft,
-                       Toast.LENGTH_SHORT).show();
-      }
-
-      @Override
       protected Void doInBackground(Void... params) {
         MasterCipher masterCipher = new MasterCipher(thisMasterSecret);
         DatabaseFactory.getDraftDatabase(ConversationActivity.this).insertDrafts(masterCipher, thisThreadId, drafts);
+        ThreadDatabase threadDatabase = DatabaseFactory.getThreadDatabase(ConversationActivity.this);
+        if (drafts.size() > 0) {
+          threadDatabase.updateSnippet(thisThreadId, drafts.getSnippet(ConversationActivity.this), Types.BASE_DRAFT_TYPE);
+        } else {
+          threadDatabase.update(thisThreadId);
+        }
         MemoryCleaner.clean(thisMasterSecret);
         return null;
       }
@@ -1051,20 +998,20 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     fragment.scrollToBottom();
   }
 
-
-  private void sendMessage(boolean forcePlaintext, boolean forceSms) {
+  private void sendMessage() {
     try {
       final Recipients recipients = getRecipients();
 
-      if (recipients == null)
+      if (recipients == null) {
         throw new RecipientFormattingException("Badly formatted");
+      }
 
       if ((!recipients.isSingleRecipient() || recipients.isEmailRecipient()) && !isMmsEnabled) {
         handleManualMmsRequired();
       } else if (attachmentManager.isAttachmentPresent() || !recipients.isSingleRecipient() || recipients.isGroupRecipient() || recipients.isEmailRecipient()) {
-        sendMediaMessage(forcePlaintext, forceSms);
+        sendMediaMessage(sendButton.getSelectedTransport().isForcedPlaintext(), sendButton.getSelectedTransport().isForcedSms());
       } else {
-        sendTextMessage(forcePlaintext, forceSms);
+        sendTextMessage(sendButton.getSelectedTransport().isForcedPlaintext(), sendButton.getSelectedTransport().isForcedSms());
       }
     } catch (RecipientFormattingException ex) {
       Toast.makeText(ConversationActivity.this,
@@ -1166,7 +1113,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private class SendButtonListener implements OnClickListener, TextView.OnEditorActionListener {
     @Override
     public void onClick(View v) {
-      sendMessage(false, false);
+      sendMessage();
     }
 
     @Override
@@ -1177,6 +1124,16 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
         return true;
       }
       return false;
+    }
+  }
+
+  private class AddContactButtonListener implements OnClickListener {
+    @Override
+    public void onClick(View v) {
+      final Intent intent = new Intent(Intent.ACTION_INSERT_OR_EDIT);
+      intent.putExtra(ContactsContract.Intents.Insert.PHONE, recipients.getPrimaryRecipient().getNumber());
+      intent.setType(ContactsContract.Contacts.CONTENT_ITEM_TYPE);
+      startActivity(intent);
     }
   }
 
@@ -1222,17 +1179,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   @Override
   public void setComposeText(String text) {
     this.composeText.setText(text);
-  }
-
-  private void setComposeHint(String hint){
-    if (hint == null) {
-      this.composeText.setHint(null);
-    } else {
-      SpannableString span = new SpannableString(hint);
-      span.setSpan(new RelativeSizeSpan(0.8f), 0, hint.length(), Spannable.SPAN_INCLUSIVE_INCLUSIVE);
-      this.composeText.setHint(span);
-      this.sendButton.setContentDescription(hint);
-    }
   }
 
   @Override
