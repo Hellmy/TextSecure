@@ -41,7 +41,6 @@ import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnFocusChangeListener;
@@ -109,7 +108,8 @@ import org.whispersystems.libaxolotl.state.SessionStore;
 import org.whispersystems.textsecure.api.push.PushAddress;
 
 import java.io.IOException;
-import java.util.LinkedList;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.List;
 
 import static org.thoughtcrime.securesms.database.GroupDatabase.GroupRecord;
@@ -179,12 +179,18 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     initializeReceivers();
     initializeResources();
-    initializeDraft();
   }
 
   @Override
   protected void onStart() {
     super.onStart();
+    initializeDraft();
+  }
+
+  @Override
+  protected void onStop() {
+    super.onStop();
+    saveDraft();
   }
 
   @Override
@@ -216,7 +222,6 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   protected void onDestroy() {
     unregisterReceiver(securityUpdateReceiver);
     unregisterReceiver(groupUpdateReceiver);
-    saveDraft();
     MemoryCleaner.clean(masterSecret);
     super.onDestroy();
   }
@@ -257,7 +262,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     if (isSingleConversation() && isEncryptedConversation) {
       inflater.inflate(R.menu.conversation_secure_identity, menu);
       inflater.inflate(R.menu.conversation_secure_sms, menu.findItem(R.id.menu_security).getSubMenu());
-    } else if (isSingleConversation() && !pushRegistered) {
+    } else if (isSingleConversation()) {
+      if (!pushRegistered) inflater.inflate(R.menu.conversation_insecure_no_push, menu);
       inflater.inflate(R.menu.conversation_insecure, menu);
     }
 
@@ -304,6 +310,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     case R.id.menu_distribution_conversation: handleDistributionConversationEnabled(item);       return true;
     case R.id.menu_edit_group:                handleEditPushGroup();                             return true;
     case R.id.menu_leave:                     handleLeavePushGroup();                            return true;
+    case R.id.menu_invite:                    handleInviteLink();                                return true;
     case android.R.id.home:                   handleReturnToConversationList();                  return true;
     }
 
@@ -328,6 +335,16 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     intent.putExtra("master_secret", masterSecret);
     startActivity(intent);
     finish();
+  }
+
+  private void handleInviteLink() {
+    try {
+      boolean a = SecureRandom.getInstance("SHA1PRNG").nextBoolean();
+      if (a) composeText.setText(getString(R.string.ConversationActivity_get_with_it, "http://sgnl.link/zhrzvk6"));
+      else   composeText.setText(getString(R.string.ConversationActivity_install_textsecure, "http://sgnl.link/1yKYqoN"));
+    } catch (NoSuchAlgorithmException e) {
+      throw new AssertionError(e);
+    }
   }
 
   private void handleVerifyIdentity() {
@@ -815,7 +832,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       Log.w("ComposeMessageActivity", e);
     } catch (MediaTooLargeException e) {
       attachmentManager.clear();
-      Toast.makeText(this, R.string.ConversationActivity_sorry_the_selected_video_exceeds_message_size_restrictions,
+      Toast.makeText(this, getString(R.string.ConversationActivity_sorry_the_selected_video_exceeds_message_size_restrictions,
+                                     (Slide.MAX_MESSAGE_SIZE/1024)),
                      Toast.LENGTH_LONG).show();
       Log.w("ComposeMessageActivity", e);
     }
@@ -831,7 +849,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       Log.w("ComposeMessageActivity", e);
     } catch (MediaTooLargeException e) {
       attachmentManager.clear();
-      Toast.makeText(this, R.string.ConversationActivity_sorry_the_selected_audio_exceeds_message_size_restrictions,
+      Toast.makeText(this, getString(R.string.ConversationActivity_sorry_the_selected_audio_exceeds_message_size_restrictions,
+                                     (Slide.MAX_MESSAGE_SIZE/1024)),
                      Toast.LENGTH_LONG).show();
       Log.w("ComposeMessageActivity", e);
     }
@@ -846,10 +865,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   }
 
   private void selectContactInfo(ContactData contactData) {
-    final CharSequence[] numbers = new CharSequence[contactData.numbers.size()];
+    final CharSequence[] numbers     = new CharSequence[contactData.numbers.size()];
     final CharSequence[] numberItems = new CharSequence[contactData.numbers.size()];
+
     for (int i = 0; i < contactData.numbers.size(); i++) {
-      numbers[i] = contactData.numbers.get(i).number;
+      numbers[i]     = contactData.numbers.get(i).number;
       numberItems[i] = contactData.numbers.get(i).type + ": " + contactData.numbers.get(i).number;
     }
 

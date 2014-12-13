@@ -16,6 +16,7 @@ import android.support.v4.widget.CursorAdapter;
 import android.support.v7.app.ActionBarActivity;
 import android.support.v7.view.ActionMode;
 import android.text.ClipboardManager;
+import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -198,13 +199,21 @@ public class ConversationFragment extends ListFragment
 
     String transport;
 
-    if      (message.isPending()) transport = "pending";
-    else if (message.isPush())    transport = "push";
-    else if (message.isMms())     transport = "mms";
-    else                          transport = "sms";
+    if      (message.isPending()) transport = getString(R.string.ConversationFragment_pending);
+    else if (message.isPush())    transport = getString(R.string.ConversationFragment_push);
+    else if (message.isMms())     transport = getString(R.string.ConversationFragment_mms);
+    else                          transport = getString(R.string.ConversationFragment_sms);
 
-    SimpleDateFormat dateFormatter = new SimpleDateFormat("EEE MMM d, yyyy 'at' hh:mm:ss a zzz");
-    AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+    String dateFormatPattern;
+
+    if (DateFormat.is24HourFormat(getActivity().getApplicationContext())) {
+      dateFormatPattern = "EEE MMM d, yyyy 'at' HH:mm:ss zzz";
+    } else {
+      dateFormatPattern = "EEE MMM d, yyyy 'at' hh:mm:ss a zzz";
+    }
+
+    SimpleDateFormat    dateFormatter = new SimpleDateFormat(dateFormatPattern);
+    AlertDialog.Builder builder       = new AlertDialog.Builder(getActivity());
     builder.setTitle(R.string.ConversationFragment_message_details);
     builder.setIcon(Dialogs.resolveIcon(getActivity(), R.attr.dialog_info_icon));
     builder.setCancelable(true);
@@ -212,13 +221,13 @@ public class ConversationFragment extends ListFragment
     if (dateReceived == dateSent || message.isOutgoing()) {
       builder.setMessage(String.format(getActivity()
                                        .getString(R.string.ConversationFragment_transport_s_sent_received_s),
-                                       transport.toUpperCase(),
+                                       transport,
                                        dateFormatter.format(new Date(dateSent))));
     } else {
       builder.setMessage(String.format(getActivity()
                                        .getString(R.string.ConversationFragment_sender_s_transport_s_sent_s_received_s),
                                        message.getIndividualRecipient().getNumber(),
-                                       transport.toUpperCase(),
+                                       transport,
                                        dateFormatter.format(new Date(dateSent)),
                                        dateFormatter.format(new Date(dateReceived))));
     }
