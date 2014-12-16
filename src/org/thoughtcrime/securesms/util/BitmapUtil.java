@@ -202,12 +202,11 @@ public class BitmapUtil {
     return getScaledCircleCroppedBitmap(bitmap, srcSize);
   }
 
-  public static Bitmap getScaledCircleCroppedBitmap(Context context, Uri uri, int destSize) throws FileNotFoundException {
-    InputStream dataStream        = context.getContentResolver().openInputStream(uri);
-    InputStream orientationStream = context.getContentResolver().openInputStream(uri);
-    Bitmap      bitmap            = BitmapFactory.decodeStream(dataStream);
-
-    return getScaledCircleCroppedBitmap(fixOrientation(bitmap, orientationStream), destSize);
+  public static Bitmap getScaledCircleCroppedBitmap(Context context, MasterSecret masterSecret, Uri uri, int destSize)
+      throws FileNotFoundException, BitmapDecodingException
+  {
+    Bitmap bitmap = createScaledBitmap(context, masterSecret, uri, destSize, destSize);
+    return getScaledCircleCroppedBitmap(bitmap, destSize);
   }
 
   public static Bitmap getScaledCircleCroppedBitmap(Bitmap bitmap, int destSize) {
