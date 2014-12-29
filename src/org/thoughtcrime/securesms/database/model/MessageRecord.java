@@ -95,11 +95,11 @@ public abstract class MessageRecord extends DisplayRecord {
   @Override
   public SpannableString getDisplayBody() {
     if (isGroupUpdate() && isOutgoing()) {
-      return emphasisAdded("Updated the group.");
+      return emphasisAdded(context.getString(R.string.MessageRecord_updated_group));
     } else if (isGroupUpdate()) {
-      return emphasisAdded(GroupUtil.getDescription(getBody().getBody()));
+      return emphasisAdded(GroupUtil.getDescription(context, getBody().getBody()));
     } else if (isGroupQuit() && isOutgoing()) {
-      return emphasisAdded("You have left the group.");
+      return emphasisAdded(context.getString(R.string.MessageRecord_left_group));
     } else if (isGroupQuit()) {
       return emphasisAdded(context.getString(R.string.ConversationItem_group_action_left, getIndividualRecipient().toShortString()));
     }
@@ -181,5 +181,16 @@ public abstract class MessageRecord extends DisplayRecord {
     spannable.setSpan(new StyleSpan(android.graphics.Typeface.ITALIC), 0, sequence.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
 
     return spannable;
+  }
+
+  public boolean equals(Object other) {
+    return other != null                              &&
+           other instanceof MessageRecord             &&
+           ((MessageRecord) other).getId() == getId() &&
+           ((MessageRecord) other).isMms() == isMms();
+  }
+
+  public int hashCode() {
+    return (int)getId();
   }
 }
