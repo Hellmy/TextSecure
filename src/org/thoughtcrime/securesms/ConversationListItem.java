@@ -110,7 +110,10 @@ public class ConversationListItem extends RelativeLayout
                              TextView.BufferType.SPANNABLE);
 
     if (thread.getDate() > 0)
-      this.dateView.setText(DateUtils.getBetterRelativeTimeSpanString(getContext(), thread.getDate()));
+      this.dateView.setText(DateUtils.getRelativeTimeSpanString(thread.getDate(),
+                                                                System.currentTimeMillis(),
+                                                                DateUtils.MINUTE_IN_MILLIS,
+                                                                DateUtils.FORMAT_ABBREV_RELATIVE));
 
     setBackground(read, batchMode);
     setContactPhoto(this.recipients.getPrimaryRecipient());
@@ -128,7 +131,7 @@ public class ConversationListItem extends RelativeLayout
   private void setContactPhoto(final Recipient recipient) {
     if (recipient == null) return;
 
-    contactPhotoImage.setImageBitmap(recipient.getCircleCroppedContactPhoto());
+    contactPhotoImage.setImageBitmap(recipient.getContactPhoto());
 
     if (!recipient.isGroupRecipient()) {
       contactPhotoImage.setOnClickListener(new View.OnClickListener() {
